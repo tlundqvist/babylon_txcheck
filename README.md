@@ -259,9 +259,14 @@ Always use `-testnet=true` when testing:
 - [Bitcoin Taproot (BIP 341)](https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki)
 - [Babylon Staking Script Documentation](https://github.com/babylonlabs-io/babylon/blob/main/docs/staking-script.md)
 
-## License
+## License & Attribution
 
-This is a demonstration tool for educational purposes. Refer to the Babylon repository for licensing information on the underlying protocol.
+This project uses a dual-license structure:
+
+- **Main tool code** (`main.go`, `fetch_fp.py`, etc.): MIT License - see root `LICENSE` file
+- **btcstaking/ directory**: Contains code extracted from the [Babylon repository](https://github.com/babylonlabs-io/babylon), licensed under Business Source License 1.1 - see `btcstaking/LICENSE`
+
+This tool is for educational/demonstration purposes and integrates with the Babylon Protocol.
 
 ## Security Warnings
 
