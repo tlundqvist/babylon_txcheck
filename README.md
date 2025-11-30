@@ -53,6 +53,12 @@ provider public key, and staking amount.
 This creates a mainnet staking output for 1,000,000 satoshis (0.01
 BTC) using the API-defined minimum staking time (64,000 blocks).
 
+### Finding your own staking public key
+
+Your public key can maybe be found in your wallet software. Otherwise
+it is revealed in a spend transaction, so look at an input in an old
+transaction where your address is used.
+
 ### Finding Finality Provider Keys
 
 Use `fetch_fp.py` to interactively select a finality provider and get
