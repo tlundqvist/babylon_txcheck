@@ -1,8 +1,8 @@
 # Babylon BTC Staking Transaction Builder
 
-A CLI tool demonstrating Babylon-style Bitcoin staking transaction
+A CLI tool demonstrating Babylon-style Bitcoin staking transactions
 creation. Useful for educational purposes or as a tool to double check
-the staking taproot address when staking BTC on the Babylon network.
+the staking taproot addresses when staking BTC on the Babylon network.
 
 This tool uses only the btcd libraries. It also includes a local copy
 of Babylon's `BuildStakingInfo` function (extracted from the Babylon
@@ -10,18 +10,39 @@ repository) without the complex Cosmos SDK dependencies.
 
 ## Overview
 
-This tool demonstrates how to create the Bitcoin staking output with
-Taproot scripts compatible with the Babylon staking protocol. The
-staking output includes three distinct spending paths:
+### Transaction Flow & Pre-Signing
 
-1. **TimeLock Path**: Staker can spend after the staking time expires (normal unbonding)
-2. **Unbonding Path**: Staker + Covenant committee can spend anytime (early unbonding)
-3. **Slashing Path**: Staker + Finality Provider + Covenant can spend anytime (for slashing)
+**1. Staking Transaction**
 
-The tool calculates and outputs:
-- The taproot staking script and the resulting taproot address of the staking output of the transaction.
-- Not the full transaction. A full transaction would also include spending inputs and maybe a change output.
-- Only staking tx. The two presigned slashing transactions used in BTC staking for Babylon are not included.
+Locks BTC in a Taproot output with three spending paths:
+- **TimeLock Path**: Staker-only spend after staking period (normal unbonding)
+- **Unbonding Path**: Staker + Covenant multi-sig for early unbonding
+- **Slashing Path**: Staker + Finality Provider + Covenant for slashing
+
+**2. Unbonding Transaction**
+
+Creates an unbonding output with two spending paths (timelock and slashing). Signing flow:
+- Staker submits unsigned transaction during stake registration
+- **Covenant committee pre-signs** during verification (before staking goes live)
+- **Staker signs later** when they decide to unbond
+- Once both signatures are in place, the transaction can be broadcast
+
+**3. Slashing Transactions**
+
+Two types that penalize misbehavior:
+- **Staking Slashing**: Spends staking output via its slashing path
+- **Unbonding Slashing**: Spends unbonding output via its slashing path
+- **Fully pre-signed** by staker AND covenant before stake activation
+- Both send slashed portion to burn address, remainder to staker after timelock
+
+### What This Tool Calculates
+
+This tool computes the output scripts and addresses for all Babylon staking outputs:
+- **Staking output**: Main Taproot address where BTC is locked
+- **Unbonding output**: Destination for early unbonding funds
+- **Slashing change output**: Timelock-protected return of unslashed funds
+
+**Note**: Only calculates outputs, not complete transactions. Real staking requires constructing full transactions, collecting signatures, and broadcasting on-chain.
 
 ## Quick Start
 
@@ -73,7 +94,7 @@ python3 fetch_fp.py
 - Filtered results keep their original numbers for easy reference
 - Selected provider's BTC public key is displayed for use with `-fp-pk` flag
 
-### Testnet Usage
+### Testnet Example Usage
 
 ```bash
 ./babylon_txcheck \
@@ -112,8 +133,15 @@ The tool displays:
 1. **Network Configuration**: Mainnet or testnet
 2. **Staking Parameters**: Amount, duration (in blocks, days, weeks, months)
 3. **Keys Summary**: Staker, finality provider, and all covenant committee keys
-4. **Spending Paths**: Scripts and control blocks for each of the three spending conditions
-5. **Staking Output**: Taproot address, PkScript hex, and output value
+4. **Staking Transaction Output**:
+   - Spending paths with scripts and control blocks for each of the three spending conditions
+   - Taproot address, PkScript hex, and output value
+5. **Unbonding Transaction Output**:
+   - Spending paths (timelock and slashing) with scripts and control blocks
+   - Taproot address, PkScript hex, and output value
+6. **Slashing Transactions Outputs**:
+   - Slashing change output script (timelock-protected return to staker)
+   - Output information for both burn address and change outputs
 
 Example output:
 
@@ -136,6 +164,10 @@ Keys Summary:
 
 ✓ Successfully built staking output using Babylon's BuildStakingInfo!
 
+════════════════════════════════════════════════════════════════════════════════
+STAKING OUTPUT
+════════════════════════════════════════════════════════════════════════════════
+
 Spending Paths:
   1. TimeLock Path (normal unbonding after staking time):
      Script: 20d45c70...ac00a09f
@@ -155,8 +187,50 @@ Staking Output Information:
   PkScript (hex): 5120a7f8c3...
   PkScript Length: 34 bytes
 
+════════════════════════════════════════════════════════════════════════════════
+UNBONDING OUTPUT
+════════════════════════════════════════════════════════════════════════════════
+
+Spending Paths:
+  1. TimeLock Path (normal unbonding after unbonding time):
+     Script: 20d45c70...ac002d01
+     Control Block: c150929b...
+
+  2. Slashing Path (slashing with FP and covenant cooperation):
+     Script: 20d45c70...ac21ac
+     Control Block: c150929b...
+
+Unbonding Output Information:
+  Value: 1000000 satoshis
+  Taproot Address: bc1p...
+  PkScript (hex): 5120b8e9d4...
+  PkScript Length: 34 bytes
+
+  Note: This output is used as input for one of the slashing transaction, the unbonding slashing transaction
+
+════════════════════════════════════════════════════════════════════════════════
+SLASHING OUTPUTS
+════════════════════════════════════════════════════════════════════════════════
+
+Slashing Change Output Script:
+  Script: 20d45c70...ac002d01
+  Control Block: c150929b...
+  Timelock: 301 blocks (unbonding time)
+
+Slashing Transaction Outputs:
+  Output 1 - Slashing Amount:
+     Destination: Burn address (specified in Babylon Genesis parameters)
+     Note: This output receives the slashed portion of staked funds
+
+  Output 2 - Change to Staker (Timelock Protected):
+     Taproot Address: bc1p...
+     PkScript (hex): 5120c7f2a5...
+     PkScript Length: 34 bytes
+
+  Note: Both staking and unbonding slashing transactions use the same change output format
+
 === Success! ===
-Taproot staking output created successfully.
+All staking, unbonding, and slashing outputs calculated successfully.
 ```
 
 ## Architecture
@@ -225,9 +299,10 @@ No Cosmos SDK or Babylon-specific dependencies required.
 
 ### Limitations
 
-- **Output only**: Tool creates staking outputs but does NOT create or broadcast complete transactions
+- **Output only**: Tool calculates staking, unbonding, and slashing output scripts/addresses but does NOT create or broadcast complete transactions
 - **No key generation**: Public keys must be provided externally
 - **No signing**: Tool does not handle private keys or transaction signing
+- **Demonstration purposes**: This is a tool for understanding Babylon staking outputs, not a production staking client
 
 ## References
 

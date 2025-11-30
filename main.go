@@ -246,6 +246,94 @@ func displayKeys(stakerPubKey, fpPubKey *btcec.PublicKey, covenantPubKeys []*btc
 	fmt.Println()
 }
 
+func displayUnbondingOutput(stakerPubKey, fpPubKey *btcec.PublicKey, covenantPubKeys []*btcec.PublicKey, covenantQuorum uint32, unbondingTime uint32, stakingAmount int64, net *chaincfg.Params) {
+	// Build unbonding output
+	unbondingInfo, err := btcstaking.BuildUnbondingInfo(
+		stakerPubKey,
+		[]*btcec.PublicKey{fpPubKey},
+		covenantPubKeys,
+		covenantQuorum,
+		uint16(unbondingTime),
+		btcutil.Amount(stakingAmount),
+		net,
+	)
+	if err != nil {
+		log.Fatalf("Failed to build unbonding info: %v", err)
+	}
+
+	// Get spending path information
+	timeLockSpendInfo, err := unbondingInfo.TimeLockPathSpendInfo()
+	if err != nil {
+		log.Fatalf("Failed to get unbonding timelock spend info: %v", err)
+	}
+	slashingSpendInfo, err := unbondingInfo.SlashingPathSpendInfo()
+	if err != nil {
+		log.Fatalf("Failed to get unbonding slashing spend info: %v", err)
+	}
+
+	unbondingAddress, err := btcutil.NewAddressTaproot(
+		unbondingInfo.UnbondingOutput.PkScript[2:],
+		net,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create unbonding Taproot address: %v", err)
+	}
+
+	fmt.Println("Spending Paths:")
+	fmt.Println("  1. TimeLock Path (normal unbonding after unbonding time):")
+	timeLockCBBytes, _ := timeLockSpendInfo.ControlBlock.ToBytes()
+	fmt.Printf("     Script: %s\n", hex.EncodeToString(timeLockSpendInfo.RevealedLeaf.Script))
+	fmt.Printf("     Control Block: %s\n", hex.EncodeToString(timeLockCBBytes))
+	fmt.Println()
+	fmt.Println("  2. Slashing Path (slashing with FP and covenant cooperation):")
+	slashingCBBytes, _ := slashingSpendInfo.ControlBlock.ToBytes()
+	fmt.Printf("     Script: %s\n", hex.EncodeToString(slashingSpendInfo.RevealedLeaf.Script))
+	fmt.Printf("     Control Block: %s\n", hex.EncodeToString(slashingCBBytes))
+	fmt.Println()
+
+	fmt.Println("Unbonding Output Information:")
+	fmt.Printf("  Value: %d satoshis\n", unbondingInfo.UnbondingOutput.Value)
+	fmt.Printf("  Taproot Address: %s\n", unbondingAddress.EncodeAddress())
+	fmt.Printf("  PkScript (hex): %s\n", hex.EncodeToString(unbondingInfo.UnbondingOutput.PkScript))
+	fmt.Printf("  PkScript Length: %d bytes\n", len(unbondingInfo.UnbondingOutput.PkScript))
+	fmt.Println()
+	fmt.Println("  Note: This output is used as input for one of the slashing transaction, the unbonding slashing transaction")
+	fmt.Println()
+}
+
+func displaySlashingOutputs(stakerPubKey *btcec.PublicKey, unbondingTime uint32, net *chaincfg.Params) {
+	// Build the slashing change output (where change returns to staker after timelock)
+	slashingChangeOutput, err := btcstaking.BuildRelativeTimelockTaprootScript(
+		stakerPubKey,
+		uint16(unbondingTime),
+		net,
+	)
+	if err != nil {
+		log.Fatalf("Failed to build slashing change output: %v", err)
+	}
+
+	slashChangeCBBytes, _ := slashingChangeOutput.SpendInfo.ControlBlock.ToBytes()
+
+	fmt.Println("Slashing Change Output Script:")
+	fmt.Printf("  Script: %s\n", hex.EncodeToString(slashingChangeOutput.SpendInfo.RevealedLeaf.Script))
+	fmt.Printf("  Control Block: %s\n", hex.EncodeToString(slashChangeCBBytes))
+	fmt.Printf("  Timelock: %d blocks (unbonding time)\n", slashingChangeOutput.LockTime)
+	fmt.Println()
+
+	fmt.Println("Slashing Transaction Outputs:")
+	fmt.Println("  Output 1 - Slashing Amount:")
+	fmt.Println("     Destination: Burn address (specified in Babylon Genesis parameters)")
+	fmt.Println("     Note: This output receives the slashed portion of staked funds")
+	fmt.Println()
+	fmt.Println("  Output 2 - Change to Staker (Timelock Protected):")
+	fmt.Printf("     Taproot Address: %s\n", slashingChangeOutput.TapAddress.EncodeAddress())
+	fmt.Printf("     PkScript (hex): %s\n", hex.EncodeToString(slashingChangeOutput.PkScript))
+	fmt.Printf("     PkScript Length: %d bytes\n", len(slashingChangeOutput.PkScript))
+	fmt.Println()
+	fmt.Println("  Note: Both staking and unbonding slashing transactions use the same change output format")
+	fmt.Println()
+}
+
 func displayStakingOutput(stakingInfo *btcstaking.StakingInfo, net *chaincfg.Params) {
 	// Get spending path information
 	timeLockSpendInfo, err := stakingInfo.TimeLockPathSpendInfo()
@@ -352,9 +440,30 @@ func main() {
 	fmt.Println("✓ Successfully built staking output using Babylon's BuildStakingInfo!")
 	fmt.Println()
 
-	// Display output
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("STAKING OUTPUT")
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
+
+	// Display staking output
 	displayStakingOutput(stakingInfo, net)
 
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("UNBONDING OUTPUT")
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
+
+	// Display unbonding output
+	displayUnbondingOutput(stakerPubKey, fpPubKey, covenantPubKeys, latest.CovenantQuorum, latest.UnbondingTimeBlocks, params.stakingAmount, net)
+
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("SLASHING OUTPUTS")
+	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
+
+	// Display slashing outputs
+	displaySlashingOutputs(stakerPubKey, latest.UnbondingTimeBlocks, net)
+
 	fmt.Println("=== Success! ===")
-	fmt.Println("Taproot staking output created successfully.")
+	fmt.Println("All staking, unbonding, and slashing outputs calculated successfully.")
 }
