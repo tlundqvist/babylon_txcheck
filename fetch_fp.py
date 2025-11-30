@@ -11,14 +11,14 @@ from wcwidth import wcswidth
 
 def fetch_finality_providers():
     """Fetch finality providers from Babylon API"""
-    url = "https://babylon.nodes.guru/babylon/btcstaking/v1/finality_providers"
+    url = "https://staking-api.babylonlabs.io/v2/finality-providers"
 
     print("Fetching finality providers from Babylon API...")
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        return data.get('finality_providers', [])
+        return data.get('data', [])
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data: {e}")
         sys.exit(1)
@@ -30,19 +30,17 @@ def visual_width(text):
 
 def get_status(fp):
     """Determine the status of a finality provider"""
-    slashed_babylon = int(fp.get('slashed_babylon_height', 0))
-    slashed_btc = int(fp.get('slashed_btc_height', 0))
-    jailed = fp.get('jailed', False)
-    soft_deleted = fp.get('soft_deleted', False)
+    state = fp.get('state', '')
 
-    if slashed_babylon > 0 or slashed_btc > 0:
-        return "slashed"
-    elif jailed:
+    # New API uses state field with enum values
+    if state == 'FINALITY_PROVIDER_STATUS_ACTIVE':
+        return "active"
+    elif state == 'FINALITY_PROVIDER_STATUS_JAILED':
         return "jailed"
-    elif soft_deleted:
+    elif state == 'FINALITY_PROVIDER_STATUS_INACTIVE':
         return "inactive"
     else:
-        return "active"
+        return "unknown"
 
 def display_providers(providers, indices=None):
     """Display finality providers in a table format

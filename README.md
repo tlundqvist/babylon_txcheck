@@ -74,7 +74,7 @@ python3 fetch_fp.py
 
 - `-time <blocks>`: Staking duration in blocks (default: uses API minimum of 64,000 blocks)
 - `-testnet`: Use Bitcoin testnet parameters (default: false, uses mainnet)
-- `-api <url>`: Babylon API endpoint (default: `https://babylon.nodes.guru/babylon/btcstaking/v1/params`)
+- `-api <url>`: Babylon API endpoint (default: `https://staking-api.babylonlabs.io/v2/network-info`)
 
 ### Public Key Formats
 
@@ -97,8 +97,8 @@ Example output:
 
 ```
 === Babylon-Style BTC Staking Transaction Builder ===
-Fetching parameters from Babylon API: https://babylon.nodes.guru/babylon/btcstaking/v1/params
-✓ Successfully fetched parameters (Covenant quorum: 6/9)
+Fetching parameters from Babylon API: https://staking-api.babylonlabs.io/v2/network-info
+✓ Successfully fetched parameters (Version: 2, Covenant quorum: 6/9)
 
 Staking Amount: 1000000 satoshis
 Staking Time: 64000 blocks (≈ 444.4 days / 63.5 weeks / 14.6 months)
@@ -184,7 +184,7 @@ The tool demonstrates key Taproot concepts:
 
 The tool fetches parameters from the Babylon API on every run to ensure compliance with current network rules:
 
-- **Default API**: `https://babylon.nodes.guru/babylon/btcstaking/v1/params`
+- **Default API**: `https://staking-api.babylonlabs.io/v2/network-info`
 - **Custom API**: Use `-api` flag to specify alternative endpoint
 - **Parameters fetched**: Covenant keys, quorum, amount limits, time limits
 

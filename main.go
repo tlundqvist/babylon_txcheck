@@ -17,16 +17,41 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
+// BabylonVersionedParams holds a single version of staking parameters
+type BabylonVersionedParams struct {
+	Version              int      `json:"version"`
+	CovenantPks          []string `json:"covenant_pks"`
+	CovenantQuorum       uint32   `json:"covenant_quorum"`
+	MinStakingValueSat   int64    `json:"min_staking_value_sat"`
+	MaxStakingValueSat   int64    `json:"max_staking_value_sat"`
+	MinStakingTimeBlocks uint32   `json:"min_staking_time_blocks"`
+	MaxStakingTimeBlocks uint32   `json:"max_staking_time_blocks"`
+	UnbondingTimeBlocks  uint32   `json:"unbonding_time_blocks"`
+}
+
 // BabylonParams holds the parameters fetched from the Babylon API
 type BabylonParams struct {
-	Params struct {
-		CovenantPks          []string `json:"covenant_pks"`
-		CovenantQuorum       uint32   `json:"covenant_quorum"`
-		MinStakingValueSat   int64    `json:"min_staking_value_sat,string"`
-		MaxStakingValueSat   int64    `json:"max_staking_value_sat,string"`
-		MinStakingTimeBlocks uint32   `json:"min_staking_time_blocks"`
-		MaxStakingTimeBlocks uint32   `json:"max_staking_time_blocks"`
-	} `json:"params"`
+	Data struct {
+		Params struct {
+			Bbn []BabylonVersionedParams `json:"bbn"`
+		} `json:"params"`
+	} `json:"data"`
+}
+
+// GetLatestParams returns the highest version parameters
+func (bp *BabylonParams) GetLatestParams() *BabylonVersionedParams {
+	if len(bp.Data.Params.Bbn) == 0 {
+		return nil
+	}
+
+	// Find the version with the highest version number
+	latest := &bp.Data.Params.Bbn[0]
+	for i := range bp.Data.Params.Bbn {
+		if bp.Data.Params.Bbn[i].Version > latest.Version {
+			latest = &bp.Data.Params.Bbn[i]
+		}
+	}
+	return latest
 }
 
 // parsePubKey parses a public key from hex string, supporting both:
@@ -106,7 +131,7 @@ func setupUsage() {
 		fmt.Fprintf(flag.CommandLine.Output(), "  -testnet\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "        Use testnet parameters (default: false, uses mainnet)\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "  -api string\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "        Babylon API endpoint (default: https://babylon.nodes.guru/babylon/btcstaking/v1/params)\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "        Babylon API endpoint (default: https://staking-api.babylonlabs.io/v2/network-info)\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "\nExample:\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "  %s -staker-pk <key> -fp-pk <key> -amount 1000000\n", "babylon_txcheck")
 	}
@@ -121,7 +146,7 @@ func parseFlags() *cliParams {
 	flag.Int64Var(&params.stakingAmount, "amount", 0, "")
 	flag.IntVar(&params.stakingTime, "time", 0, "")
 	flag.BoolVar(&params.useTestnet, "testnet", false, "")
-	flag.StringVar(&params.apiURL, "api", "https://babylon.nodes.guru/babylon/btcstaking/v1/params", "")
+	flag.StringVar(&params.apiURL, "api", "https://staking-api.babylonlabs.io/v2/network-info", "")
 	flag.Parse()
 
 	return params
@@ -145,28 +170,34 @@ func fetchAndValidateParams(params *cliParams) (*BabylonParams, int) {
 	if err != nil {
 		log.Fatalf("Failed to fetch Babylon parameters: %v", err)
 	}
-	fmt.Printf("✓ Successfully fetched parameters (Covenant quorum: %d/%d)\n",
-		babylonParams.Params.CovenantQuorum, len(babylonParams.Params.CovenantPks))
+
+	latest := babylonParams.GetLatestParams()
+	if latest == nil {
+		log.Fatalf("No parameter versions found in API response")
+	}
+
+	fmt.Printf("✓ Successfully fetched parameters (Version: %d, Covenant quorum: %d/%d)\n",
+		latest.Version, latest.CovenantQuorum, len(latest.CovenantPks))
 	fmt.Println()
 
 	finalTime := params.stakingTime
 	if finalTime == 0 {
-		finalTime = int(babylonParams.Params.MinStakingTimeBlocks)
+		finalTime = int(latest.MinStakingTimeBlocks)
 		fmt.Printf("Using API minimum staking time: %d blocks\n", finalTime)
 	}
 
 	// Validate against API limits
-	if params.stakingAmount < babylonParams.Params.MinStakingValueSat {
-		log.Fatalf("Staking amount %d is below minimum %d", params.stakingAmount, babylonParams.Params.MinStakingValueSat)
+	if params.stakingAmount < latest.MinStakingValueSat {
+		log.Fatalf("Staking amount %d is below minimum %d", params.stakingAmount, latest.MinStakingValueSat)
 	}
-	if params.stakingAmount > babylonParams.Params.MaxStakingValueSat {
-		log.Fatalf("Staking amount %d exceeds maximum %d", params.stakingAmount, babylonParams.Params.MaxStakingValueSat)
+	if params.stakingAmount > latest.MaxStakingValueSat {
+		log.Fatalf("Staking amount %d exceeds maximum %d", params.stakingAmount, latest.MaxStakingValueSat)
 	}
-	if uint32(finalTime) < babylonParams.Params.MinStakingTimeBlocks {
-		log.Fatalf("Staking time %d is below minimum %d", finalTime, babylonParams.Params.MinStakingTimeBlocks)
+	if uint32(finalTime) < latest.MinStakingTimeBlocks {
+		log.Fatalf("Staking time %d is below minimum %d", finalTime, latest.MinStakingTimeBlocks)
 	}
-	if uint32(finalTime) > babylonParams.Params.MaxStakingTimeBlocks {
-		log.Fatalf("Staking time %d exceeds maximum %d", finalTime, babylonParams.Params.MaxStakingTimeBlocks)
+	if uint32(finalTime) > latest.MaxStakingTimeBlocks {
+		log.Fatalf("Staking time %d exceeds maximum %d", finalTime, latest.MaxStakingTimeBlocks)
 	}
 
 	return babylonParams, finalTime
@@ -298,17 +329,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to parse finality provider public key: %v", err)
 	}
-	covenantPubKeys := parseCovenantKeys(babylonParams.Params.CovenantPks)
+	latest := babylonParams.GetLatestParams()
+	covenantPubKeys := parseCovenantKeys(latest.CovenantPks)
 
 	// Display keys
-	displayKeys(stakerPubKey, fpPubKey, covenantPubKeys, babylonParams.Params.CovenantQuorum)
+	displayKeys(stakerPubKey, fpPubKey, covenantPubKeys, latest.CovenantQuorum)
 
 	// Build staking info using Babylon's implementation
 	stakingInfo, err := btcstaking.BuildStakingInfo(
 		stakerPubKey,
 		[]*btcec.PublicKey{fpPubKey},
 		covenantPubKeys,
-		babylonParams.Params.CovenantQuorum,
+		latest.CovenantQuorum,
 		uint16(finalTime),
 		btcutil.Amount(params.stakingAmount),
 		net,

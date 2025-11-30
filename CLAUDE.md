@@ -37,7 +37,7 @@ go build -o babylon_txcheck
 # Optional flags:
 #   -time int           Staking time in blocks (default: uses API minimum of 64000 blocks)
 #   -testnet bool       Use testnet parameters (default: false, uses mainnet)
-#   -api string         Babylon API endpoint (default: "https://babylon.nodes.guru/babylon/btcstaking/v1/params")
+#   -api string         Babylon API endpoint (default: "https://staking-api.babylonlabs.io/v2/network-info")
 ```
 
 **Note:** The tool fetches parameters dynamically from the Babylon API on each run, including:
