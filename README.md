@@ -1,14 +1,27 @@
 # Babylon BTC Staking Transaction Builder
 
-A CLI tool demonstrating Babylon-style Bitcoin staking transaction creation using only btcd libraries. This implementation includes a local copy of Babylon's `BuildStakingInfo` function (extracted from the Babylon repository) without the complex Cosmos SDK dependencies.
+A CLI tool demonstrating Babylon-style Bitcoin staking transaction
+creation. Useful for educational purposes or as a tool to double check
+the staking taproot address when staking BTC on the Babylon network.
+
+This tool uses only the btcd libraries. It also includes a local copy
+of Babylon's `BuildStakingInfo` function (extracted from the Babylon
+repository) without the complex Cosmos SDK dependencies.
 
 ## Overview
 
-This tool demonstrates how to create Bitcoin staking outputs with Taproot scripts compatible with the Babylon staking protocol. The staking output includes three distinct spending paths:
+This tool demonstrates how to create the Bitcoin staking output with
+Taproot scripts compatible with the Babylon staking protocol. The
+staking output includes three distinct spending paths:
 
 1. **TimeLock Path**: Staker can spend after the staking time expires (normal unbonding)
 2. **Unbonding Path**: Staker + Covenant committee can spend anytime (early unbonding)
 3. **Slashing Path**: Staker + Finality Provider + Covenant can spend anytime (for slashing)
+
+The tool calculates and outputs:
+- The taproot staking script and the resulting taproot address of the staking output of the transaction.
+- Not the full transaction. A full transaction would also include spending inputs and maybe a change output.
+- Only staking tx. The two presigned slashing transactions used in BTC staking for Babylon are not included.
 
 ## Quick Start
 
@@ -27,7 +40,8 @@ go build -o babylon_txcheck
 
 ### Basic Usage
 
-The tool requires three parameters: staker public key, finality provider public key, and staking amount.
+The tool requires three parameters: staker public key, finality
+provider public key, and staking amount.
 
 ```bash
 ./babylon_txcheck \
@@ -36,11 +50,13 @@ The tool requires three parameters: staker public key, finality provider public 
   -amount 1000000
 ```
 
-This creates a mainnet staking output for 1,000,000 satoshis (0.01 BTC) using the API-defined minimum staking time (64,000 blocks).
+This creates a mainnet staking output for 1,000,000 satoshis (0.01
+BTC) using the API-defined minimum staking time (64,000 blocks).
 
 ### Finding Finality Provider Keys
 
-Use `fetch_fp.py` to interactively select a finality provider and get their BTC public key:
+Use `fetch_fp.py` to interactively select a finality provider and get
+their BTC public key:
 
 ```bash
 pip install requests wcwidth
@@ -156,9 +172,9 @@ babylon_txcheck/
 ### How It Works
 
 1. **Fetch Parameters**: Retrieves live network parameters from Babylon API:
-   - 9 covenant public keys with 6-of-9 quorum requirement
-   - Min/max staking amounts (500,000 to 500,000,000,000 satoshis)
-   - Min/max staking duration (64,000 blocks)
+   - Covenant public keys with quorum requirement
+   - Min/max staking amounts
+   - Min/max staking duration
 
 2. **Validate Inputs**: Ensures user-provided values meet network requirements
 
@@ -179,27 +195,6 @@ The tool demonstrates key Taproot concepts:
 - **X-only public keys**: Converts compressed pubkeys to x-only format (32 bytes) for Taproot scripts
 - **Control blocks**: Generated from Merkle proofs for each spending path
 - **Relative timelocks**: Uses CSV (CheckSequenceVerify) for time-bound spending conditions
-
-## API Integration
-
-The tool fetches parameters from the Babylon API on every run to ensure compliance with current network rules:
-
-- **Default API**: `https://staking-api.babylonlabs.io/v2/network-info`
-- **Custom API**: Use `-api` flag to specify alternative endpoint
-- **Parameters fetched**: Covenant keys, quorum, amount limits, time limits
-
-All user inputs are validated against these fetched limits before creating the staking output.
-
-## Parameter Limits
-
-Current Babylon mainnet limits (as of API fetch):
-
-- **Min staking amount**: 500,000 satoshis (0.005 BTC)
-- **Max staking amount**: 500,000,000,000 satoshis (5,000 BTC)
-- **Staking duration**: 64,000 blocks (≈ 444 days)
-- **Covenant quorum**: 6 of 9 signatures required
-
-*Note: These values are fetched dynamically and may change.*
 
 ## Development Notes
 
@@ -227,30 +222,6 @@ No Cosmos SDK or Babylon-specific dependencies required.
 - **Output only**: Tool creates staking outputs but does NOT create or broadcast complete transactions
 - **No key generation**: Public keys must be provided externally
 - **No signing**: Tool does not handle private keys or transaction signing
-- **Educational purpose**: Not intended for production use
-
-## Testing
-
-### Generate Test Keys
-
-Use `btcd` tools or any Bitcoin key generator:
-
-```bash
-# Example x-only pubkey (not a real key - do not use)
-d45c70d28f169e1f0c7f4a78e2bc73497afe585b70aa897955989068f3350aaa
-```
-
-### Test on Testnet First
-
-Always use `-testnet=true` when testing:
-
-```bash
-./babylon_txcheck \
-  -staker-pk <your-test-key> \
-  -fp-pk <test-fp-key> \
-  -amount 500000 \
-  -testnet=true
-```
 
 ## References
 
@@ -270,7 +241,5 @@ This tool is for educational/demonstration purposes and integrates with the Baby
 
 ## Security Warnings
 
-- Never use this tool with real private keys
-- Always test on testnet before mainnet
 - Verify all outputs independently before broadcasting any transactions
-- This tool is for educational purposes only - use at your own risk
+- Use at your own risk!
